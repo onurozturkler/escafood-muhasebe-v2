@@ -1,0 +1,11 @@
+{
+  "name": "escafood-migrate",
+  "version": "1.0.0",
+  "scripts": {
+    "migrate": "node migrate.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "@supabase/supabase-js": "^2.39.0"
+  }
+}
