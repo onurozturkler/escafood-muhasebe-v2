@@ -31,7 +31,7 @@ export default function TekliflerClient({ teklifler }: { teklifler: Teklif[] }) 
     return l
   }, [teklifler,q,durum,bas,bit,sort,dir])
 
-  const aktifToplam = list.filter(t=>t.durum==='aktif').reduce((s,t)=>s+t.genel_toplam,0)
+  const aktifToplam = list.filter(t=>t.durum!=='iptal').reduce((s,t)=>s+t.genel_toplam,0)
 
   return (
     <div>
@@ -50,7 +50,6 @@ export default function TekliflerClient({ teklifler }: { teklifler: Teklif[] }) 
         </div>
         <select value={durum} onChange={e=>setDurum(e.target.value)} className="form-input" style={{ width:140 }}>
           <option value="">Tüm durumlar</option>
-          <option value="aktif">Aktif</option>
           <option value="iptal">İptal</option>
           <option value="onaylandi">Onaylandı</option>
         </select>
@@ -81,8 +80,8 @@ export default function TekliflerClient({ teklifler }: { teklifler: Teklif[] }) 
                 <td style={{ color:'#9099A8' }}>{new Date(t.tarih).toLocaleDateString('tr-TR')}</td>
                 <td style={{ textAlign:'right', fontFamily:'DM Mono,monospace', fontSize:13, fontWeight:600, textDecoration:t.durum==='iptal'?'line-through':'none', color:t.durum==='iptal'?'#9099A8':'#111318' }}>₺{para(t.genel_toplam)}</td>
                 <td style={{ textAlign:'right' }}>
-                  <span className={`badge ${t.durum==='aktif'?'badge-green':t.durum==='iptal'?'badge-red':'badge-blue'}`}>
-                    {t.durum==='aktif'?'Aktif':t.durum==='iptal'?'İptal':'Onaylandı'}
+                  <span className={`badge ${t.durum==='iptal'?'badge-red':'badge-blue'}`}>
+                    {t.durum==='iptal'?'İptal':'Onaylandı'}
                   </span>
                 </td>
                 <td style={{ textAlign:'right' }}><Link href={`/teklifler/${t.id}`} className="btn btn-ghost btn-sm">Detay →</Link></td>
@@ -103,8 +102,8 @@ export default function TekliflerClient({ teklifler }: { teklifler: Teklif[] }) 
                   <div style={{ fontWeight:600, fontSize:14, color:'#111318' }}>{t.musteriler?.musteri_adi??'-'}</div>
                   <div style={{ fontSize:12, color:'#9099A8', marginTop:2 }}>#{t.teklif_no} · {new Date(t.tarih).toLocaleDateString('tr-TR')}</div>
                 </div>
-                <span className={`badge ${t.durum==='aktif'?'badge-green':t.durum==='iptal'?'badge-red':'badge-blue'}`}>
-                  {t.durum==='aktif'?'Aktif':t.durum==='iptal'?'İptal':'Onaylandı'}
+                <span className={`badge ${t.durum==='iptal'?'badge-red':'badge-blue'}`}>
+                  {t.durum==='iptal'?'İptal':'Onaylandı'}
                 </span>
               </div>
               <div style={{ fontSize:18, fontWeight:700, fontFamily:'DM Mono,monospace', color:t.durum==='iptal'?'#9099A8':'var(--brand)', textDecoration:t.durum==='iptal'?'line-through':'none' }}>

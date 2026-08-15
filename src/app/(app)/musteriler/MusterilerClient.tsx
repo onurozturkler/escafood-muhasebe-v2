@@ -3,7 +3,7 @@ import { useState, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { para } from '@/lib/format'
+import { para, sayiCoz } from '@/lib/format'
 import * as XLSX from 'xlsx'
 import SifreOnay from '@/components/SifreOnay'
 
@@ -12,6 +12,14 @@ type Musteri = {
   telefon: string | null; toplam_borc: number; toplam_tahsilat: number; bakiye: number
 }
 type SortKey = 'musteri_adi' | 'toplam_borc' | 'toplam_tahsilat' | 'bakiye'
+type ImportKayit = {
+  musteri_adi: string
+  adres: string | null
+  telefon: string | null
+  email: string | null
+  acilis_bakiyesi: number
+  _ham: string
+}
 
 export default function MusterilerClient({ musteriler: init }: { musteriler: Musteri[] }) {
   const router    = useRouter()
@@ -26,6 +34,8 @@ export default function MusterilerClient({ musteriler: init }: { musteriler: Mus
   const [silModal, setSilModal] = useState<string[]>([])
   const [sifreModal, setSifreModal] = useState(false)
   const [silYukleniyor, setSilYukleniyor] = useState(false)
+  const [importOnizleme, setImportOnizleme] = useState<ImportKayit[] | null>(null)
+  const [importYukleniyor, setImportYukleniyor] = useState(false)
 
   const toggleSort = (k: SortKey) => {
     if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -94,27 +104,43 @@ export default function MusterilerClient({ musteriler: init }: { musteriler: Mus
     XLSX.writeFile(wb, `Musteriler_${new Date().toLocaleDateString('tr-TR').replace(/\./g, '-')}.xlsx`)
   }
 
+  // Dosyayı okur, ayrıştırır — ama INSERT ETMEZ.
+  // Kullanıcı önizlemeyi onaylamadan hiçbir kayıt yazılmaz.
   const excelImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return
     const reader = new FileReader()
-    reader.onload = async ev => {
+    reader.onload = ev => {
       const wb = XLSX.read(new Uint8Array(ev.target?.result as ArrayBuffer), { type: 'array' })
-      const rows: any[] = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]])
-      if (!rows.length) return
-      const supabase = createClient()
-      const kayitlar = rows.map(r => ({
-        musteri_adi:      r['Müşteri Adı'] || r['musteri_adi'] || '',
-        adres:            r['Adres'] || r['adres'] || null,
-        telefon:          r['Telefon'] || r['telefon'] || null,
-        email:            r['E-posta'] || r['email'] || null,
-        acilis_bakiyesi:  parseFloat(r['Açılış Bakiyesi'] || r['acilis_bakiyesi'] || 0) || 0,
-      })).filter(k => k.musteri_adi)
-      const { error } = await supabase.from('musteriler').insert(kayitlar)
-      if (error) { alert('İçe aktarma hatası: ' + error.message); return }
-      router.refresh()
+      // raw:false → hücreler görüntülendiği gibi metin olarak gelir; sayiCoz TR formatını çözer.
+      const rows: any[] = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: false })
+      if (!rows.length) { alert('Dosyada satır bulunamadı.'); return }
+      const kayitlar: ImportKayit[] = rows.map(r => {
+        const ham = r['Açılış Bakiyesi'] ?? r['acilis_bakiyesi'] ?? ''
+        return {
+          musteri_adi:     String(r['Müşteri Adı'] || r['musteri_adi'] || '').trim(),
+          adres:           r['Adres'] || r['adres'] || null,
+          telefon:         r['Telefon'] || r['telefon'] || null,
+          email:           r['E-posta'] || r['email'] || null,
+          acilis_bakiyesi: sayiCoz(ham),
+          _ham:            String(ham ?? ''),
+        }
+      }).filter(k => k.musteri_adi)
+      if (!kayitlar.length) { alert('Geçerli müşteri adı içeren satır bulunamadı.'); return }
+      setImportOnizleme(kayitlar)
     }
     reader.readAsArrayBuffer(file)
     e.target.value = ''
+  }
+
+  const importOnayla = async () => {
+    if (!importOnizleme) return
+    setImportYukleniyor(true)
+    const kayitlar = importOnizleme.map(({ _ham, ...k }) => k)
+    const { error } = await createClient().from('musteriler').insert(kayitlar)
+    setImportYukleniyor(false)
+    setImportOnizleme(null)
+    if (error) { alert('İçe aktarma hatası: ' + error.message); return }
+    router.refresh()
   }
 
   const toplamBakiye = filtered.reduce((s, m) => s + (m.bakiye ?? 0), 0)
@@ -268,6 +294,45 @@ export default function MusterilerClient({ musteriler: init }: { musteriler: Mus
                 Devam Et →
               </button>
               <button onClick={() => setSilModal([])} className="btn btn-secondary" style={{ flex:1, justifyContent:'center' }}>İptal</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Excel içe aktarma önizlemesi — onay alınmadan insert yok */}
+      {importOnizleme && (
+        <div className="modal-overlay" onClick={e => { if(e.target===e.currentTarget) setImportOnizleme(null) }}>
+          <div className="modal-box" style={{ maxWidth:620 }}>
+            <div style={{ padding:'24px 24px 0' }}>
+              <h2 style={{ fontSize:16, fontWeight:700, marginBottom:6 }}>İçe Aktarma Önizlemesi</h2>
+              <p style={{ fontSize:13, color:'#5A6072', lineHeight:1.6, marginBottom:14 }}>
+                {importOnizleme.length} müşteri eklenecek. Açılış bakiyelerinin doğru okunduğunu kontrol edin
+                (ilk {Math.min(5, importOnizleme.length)} satır):
+              </p>
+              <div style={{ overflowX:'auto', border:'1px solid #ECEEF2', borderRadius:8 }}>
+                <table className="data-table">
+                  <thead><tr>
+                    <th>Müşteri</th>
+                    <th style={{ textAlign:'right' }}>Dosyadaki değer</th>
+                    <th style={{ textAlign:'right' }}>Okunan açılış bakiyesi</th>
+                  </tr></thead>
+                  <tbody>
+                    {importOnizleme.slice(0, 5).map((k, i) => (
+                      <tr key={i}>
+                        <td style={{ fontWeight:500 }}>{k.musteri_adi}</td>
+                        <td style={{ textAlign:'right', fontFamily:'DM Mono,monospace', fontSize:12, color:'#9099A8' }}>{k._ham || '—'}</td>
+                        <td style={{ textAlign:'right', fontFamily:'DM Mono,monospace', fontSize:13, fontWeight:600 }}>₺{para(k.acilis_bakiyesi)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div style={{ padding:'20px 24px', display:'flex', gap:10 }}>
+              <button onClick={importOnayla} disabled={importYukleniyor} className="btn btn-primary" style={{ flex:1, justifyContent:'center' }}>
+                {importYukleniyor ? 'Aktarılıyor…' : `${importOnizleme.length} Kaydı Aktar`}
+              </button>
+              <button onClick={() => setImportOnizleme(null)} className="btn btn-secondary" style={{ flex:1, justifyContent:'center' }}>Vazgeç</button>
             </div>
           </div>
         </div>

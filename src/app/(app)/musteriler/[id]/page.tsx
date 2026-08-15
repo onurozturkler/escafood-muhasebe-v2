@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { para, tarih } from '@/lib/format'
+import { bakiyeSeyriTumu, hareketIsareti } from '@/lib/cari'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import EkstrePDFButton from './EkstrePDFButton'
@@ -17,7 +18,7 @@ export default async function MusteriDetayPage({ params }: { params: Promise<{ i
 
   if (!musteri) notFound()
 
-  const hareketler = [
+  const ham = [
     ...(teklifler?.map(t => ({
       id: t.id, tarih: t.tarih, tip: 'teklif' as const,
       no: `#${t.teklif_no}`, tutar: t.genel_toplam,
@@ -28,7 +29,11 @@ export default async function MusteriDetayPage({ params }: { params: Promise<{ i
       no: `TH${t.tahsilat_no}`, tutar: t.tutar,
       iptal: t.iptal, href: `/tahsilatlar/${t.id}`,
     })) ?? []),
-  ].sort((a, b) => new Date(a.tarih).getTime() - new Date(b.tarih).getTime())
+  ]
+
+  // Sıralama ve kümülatif bakiye src/lib/cari.ts'de — ekstre PDF'i ile aynı kod.
+  const acilis = musteri.acilis_bakiyesi ?? 0
+  const hareketler = bakiyeSeyriTumu(acilis, ham)
 
   const stats = [
     { label: 'Açılış Bakiyesi', value: musteri.acilis_bakiyesi ?? 0, cls: '' },
@@ -54,7 +59,7 @@ export default async function MusteriDetayPage({ params }: { params: Promise<{ i
             </p>
           )}
         </div>
-        <EkstrePDFButton musteri={musteri} hareketler={hareketler} />
+        <EkstrePDFButton musteri={musteri} hareketler={ham} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 24 }}>
@@ -73,9 +78,19 @@ export default async function MusteriDetayPage({ params }: { params: Promise<{ i
             <tr>
               <th>Tarih</th><th>Belge No</th><th>Tür</th>
               <th style={{ textAlign: 'right' }}>Tutar</th>
+              <th style={{ textAlign: 'right' }}>Bakiye</th>
             </tr>
           </thead>
           <tbody>
+            <tr>
+              <td style={{ color: '#9099A8' }}>—</td>
+              <td style={{ color: '#9099A8', fontSize: 13 }}>Açılış</td>
+              <td></td>
+              <td></td>
+              <td style={{ textAlign: 'right', fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 600, color: '#5A6072' }}>
+                ₺{para(acilis)}
+              </td>
+            </tr>
             {hareketler.map(h => (
               <tr key={h.id} style={{ opacity: h.iptal ? .45 : 1 }}>
                 <td style={{ color: '#9099A8' }}>{tarih(h.tarih)}</td>
@@ -90,12 +105,16 @@ export default async function MusteriDetayPage({ params }: { params: Promise<{ i
                 <td style={{ textAlign: 'right', fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 600,
                   textDecoration: h.iptal ? 'line-through' : 'none',
                   color: h.iptal ? '#9099A8' : h.tip === 'teklif' ? 'var(--brand)' : '#15803D' }}>
-                  {h.tip === 'teklif' ? '-' : '+'}₺{para(h.tutar)}
+                  {hareketIsareti(h)}₺{para(h.tutar)}
+                </td>
+                <td style={{ textAlign: 'right', fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 600,
+                  color: h.bakiye === null ? '#BCC1CB' : '#111318' }}>
+                  {h.bakiye === null ? '—' : `₺${para(h.bakiye)}`}
                 </td>
               </tr>
             ))}
             {hareketler.length === 0 && (
-              <tr><td colSpan={4} style={{ textAlign: 'center', color: '#9099A8', padding: '40px 0', fontSize: 13 }}>Henüz hareket yok</td></tr>
+              <tr><td colSpan={5} style={{ textAlign: 'center', color: '#9099A8', padding: '40px 0', fontSize: 13 }}>Henüz hareket yok</td></tr>
             )}
           </tbody>
         </table>

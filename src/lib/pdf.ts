@@ -5,6 +5,7 @@ import fontkit from '@pdf-lib/fontkit'
 import { NOTO_REGULAR } from './font_regular'
 import { NOTO_BOLD } from './font_bold'
 import { para, tarih, tahsilatTuruLabel } from './format'
+import { bakiyeSeyri, hareketIsareti, type Hareket } from './cari'
 
 const RED   = rgb(0.86, 0.12, 0.12)
 const BLUE  = rgb(0.05, 0.31, 0.55)
@@ -277,9 +278,12 @@ function addPage(ctx: PdfCtx): Cursor {
   return { page, y }
 }
 
-function ensureSpace(ctx: PdfCtx, cursor: Cursor, neededHeight: number): Cursor {
-  if (cursor.y - neededHeight < FOOTER_SAFE_Y) return addPage(ctx)
-  return cursor
+// Yeni sayfa açılıp açılmadığını açıkça bildirir.
+// Daha önce çağıranlar `cursor.y === CONTENT_START_Y` float eşitliğiyle
+// sayfa başını tespit etmeye çalışıyordu; bu güvenilmezdi.
+function ensureSpace(ctx: PdfCtx, cursor: Cursor, neededHeight: number): { cursor: Cursor; yeniSayfa: boolean } {
+  if (cursor.y - neededHeight < FOOTER_SAFE_Y) return { cursor: addPage(ctx), yeniSayfa: true }
+  return { cursor, yeniSayfa: false }
 }
 
 function drawFooterAll(ctx: PdfCtx) {
@@ -289,7 +293,7 @@ function drawFooterAll(ctx: PdfCtx) {
     const { width } = page.getSize()
     page.drawLine({ start: { x: MARGIN_X, y: 32 }, end: { x: width - MARGIN_X, y: 32 }, thickness: 0.3, color: BORDER })
     page.drawText(`Sayfa ${index + 1} / ${total}`, { x: MARGIN_X, y: FOOTER_Y, size: 7, font: ctx.regular, color: GRAY })
-    const site = 'www.escafood.com.tr'
+    const site = 'www.esca-food.com'
     page.drawText(site, { x: width - MARGIN_X - textWidth(ctx.regular, site, 7), y: FOOTER_Y, size: 7, font: ctx.regular, color: GRAY })
   })
 }
@@ -377,7 +381,7 @@ function drawTable(ctx: PdfCtx, cursor: Cursor, cols: Col[], rows: string[][], h
   const lineH = LINE_H
   const tableW = cols.reduce((sum, col) => sum + col.width, 0)
 
-  cursor = ensureSpace(ctx, cursor, 36)
+  cursor = ensureSpace(ctx, cursor, 36).cursor
   cursor.y = drawTableHeader(cursor.page, ctx, cursor.y, cols, headerColor)
 
   rows.forEach((row, ri) => {
@@ -403,8 +407,10 @@ function drawTable(ctx: PdfCtx, cursor: Cursor, cols: Col[], rows: string[][], h
     const maxLines = Math.max(...wrapped.map(w => w.length), 1)
     const rowH = maxLines * lineH + rowPad * 2
 
-    cursor = ensureSpace(ctx, cursor, rowH + 24)
-    if (cursor.y === CONTENT_START_Y) cursor.y = drawTableHeader(cursor.page, ctx, cursor.y, cols, headerColor)
+    const space = ensureSpace(ctx, cursor, rowH + 24)
+    cursor = space.cursor
+    // Yeni sayfaya taşındıysak tablo başlığını tekrar çiz.
+    if (space.yeniSayfa) cursor.y = drawTableHeader(cursor.page, ctx, cursor.y, cols, headerColor)
 
     const bg = ri % 2 === 0 ? LGRAY : WHITE
     cursor.page.drawRectangle({ x: x0, y: cursor.y - rowH, width: tableW, height: rowH, color: bg, borderColor: BORDER, borderWidth: 0.25 })
@@ -430,7 +436,7 @@ function drawTotals(ctx: PdfCtx, cursor: Cursor, rows: { label: string; value: s
   const boxW = 210
   const rowH = 18
   const boxH = rows.length * rowH + 8
-  cursor = ensureSpace(ctx, cursor, boxH + 8)
+  cursor = ensureSpace(ctx, cursor, boxH + 8).cursor
 
   const x = PAGE_W - MARGIN_X - boxW
   let y = cursor.y
@@ -457,7 +463,7 @@ function drawNote(ctx: PdfCtx, cursor: Cursor, note: string, color = LGRAY): Cur
   const width = PAGE_W - MARGIN_X * 2
   const lines = wrapText(clean, ctx.regular, 8, width - 18)
   const h = Math.max(30, lines.length * 10 + 18)
-  cursor = ensureSpace(ctx, cursor, h + 8)
+  cursor = ensureSpace(ctx, cursor, h + 8).cursor
 
   cursor.page.drawRectangle({ x: MARGIN_X, y: cursor.y - h, width, height: h, color, borderColor: BORDER, borderWidth: 0.5 })
   cursor.page.drawText('Not / Açıklama', { x: MARGIN_X + 8, y: cursor.y - 12, size: 8, font: ctx.bold, color: GRAY })
@@ -488,7 +494,7 @@ export async function teklifPDF(teklif: any, musteri: any, kalemler: any[] = [])
   const belgeRows: InfoRow[] = [
     { label: 'Belge No', value: teklifNo, boldValue: true },
     { label: 'Tarih', value: tarih(val(teklif?.tarih, teklif?.createdAt, Date.now())) },
-    { label: 'Durum', value: teklif?.iptal ? 'İptal Edildi' : 'Geçerli' },
+    { label: 'Durum', value: teklif?.durum === 'iptal' ? 'İptal Edildi' : 'Geçerli' },
   ]
 
   const musteriRows: InfoRow[] = [
@@ -533,7 +539,7 @@ export async function teklifPDF(teklif: any, musteri: any, kalemler: any[] = [])
 
   cursor = drawTable(ctx, cursor, cols, rows.length ? rows : [['-', 'Ürün bulunamadı', '-', '-', '-', '-']], BLUE)
 
-  const araToplam = Number(val(teklif?.ara_toplam, teklif?.araToplam, teklif?.toplamTutar, rows.reduce((s, r) => s + 0, 0), 0))
+  const araToplam = Number(val(teklif?.ara_toplam, teklif?.araToplam, teklif?.toplamTutar, 0))
   const iskontoOrani = Number(val(teklif?.iskonto_orani, teklif?.iskontoOrani, 0))
   const iskontoTutar = Number(val(teklif?.iskonto_tutar, teklif?.iskontoTutar, 0))
   const genelToplam = Number(val(teklif?.genel_toplam, teklif?.genelToplam, teklif?.toplamTutar, araToplam - iskontoTutar, 0))
@@ -567,7 +573,7 @@ export async function tahsilatPDF(tahsilat: any, musteri: any) {
 
   cursor.y = drawInfoBox(ctx, cursor, 'TAHSİLAT MAKBUZU', rows, MARGIN_X, cursor.y, PAGE_W - MARGIN_X * 2, BLUE, SOFT_BLUE) - 18
 
-  cursor = ensureSpace(ctx, cursor, 42)
+  cursor = ensureSpace(ctx, cursor, 42).cursor
   cursor.page.drawRectangle({ x: MARGIN_X, y: cursor.y - 36, width: PAGE_W - MARGIN_X * 2, height: 36, color: BLUE })
   const txt = `TAHSİL EDİLEN TUTAR: ${money(tahsilat?.tutar)}`
   drawTextAligned(cursor.page, txt, MARGIN_X, cursor.y - 22, PAGE_W - MARGIN_X * 2, 13, ctx.bold, WHITE, 'center')
@@ -580,13 +586,23 @@ export async function ekstrePDF(musteri: any, hareketler: any[] = []) {
   const ctx = await createDoc('CARİ HESAP EKSTRESİ', GREEN)
   let cursor = addPage(ctx)
 
-  const aktif = hareketler.filter(h => !h?.iptal)
   const musteriAdi = safeText(val(musteri?.musteri_adi, musteri?.musteriAdi, musteri?.ad), 'Musteri')
+  const acilis = Number(val(musteri?.acilis_bakiyesi, musteri?.acilisBakiyesi, 0)) || 0
+
+  // Bakiye hesabı src/lib/cari.ts'de; burada tekrar edilmiyor.
+  const seyir = bakiyeSeyri(acilis, hareketler.map((h): Hareket & { aciklama?: string } => ({
+    tarih: h?.tarih,
+    tip: h?.tip === 'teklif' ? 'teklif' : 'tahsilat',
+    tutar: Number(val(h?.tutar, h?.toplamTutar, 0)) || 0,
+    iptal: Boolean(h?.iptal),
+    no: safeText(val(h?.no, h?.belgeNo, h?.teklifNo, h?.tahsilatNo), ''),
+    aciklama: safeText(val(h?.aciklama, h?.not), ''),
+  })))
 
   const ozetRows: InfoRow[] = [
     { label: 'Müşteri', value: musteriAdi, boldValue: true },
     { label: 'Adres', value: safeText(musteri?.adres) },
-    { label: 'Açılış Bakiyesi', value: money(val(musteri?.acilis_bakiyesi, musteri?.acilisBakiyesi, 0)), valueAlign: 'right' },
+    { label: 'Açılış Bakiyesi', value: money(acilis), valueAlign: 'right' },
     { label: 'Toplam Borç', value: money(val(musteri?.toplam_borc, musteri?.toplamBorc, 0)), valueAlign: 'right' },
     { label: 'Tahsilat', value: money(val(musteri?.toplam_tahsilat, musteri?.toplamTahsilat, 0)), valueAlign: 'right' },
     { label: 'Bakiye', value: money(val(musteri?.bakiye, musteri?.carihesap, 0)), valueAlign: 'right', boldValue: true },
@@ -603,20 +619,14 @@ export async function ekstrePDF(musteri: any, hareketler: any[] = []) {
     { header: 'Bakiye', width: 105, align: 'right' },
   ]
 
-  let kumBakiye = Number(val(musteri?.acilis_bakiyesi, musteri?.acilisBakiyesi, 0))
-  const tableRows = aktif.map(h => {
-    const tip = safeText(h?.tip)
-    const tutar = Number(val(h?.tutar, h?.toplamTutar, 0))
-    kumBakiye += tip === 'teklif' ? -tutar : tutar
-    return [
-      tarih(h?.tarih),
-      safeText(val(h?.no, h?.belgeNo, h?.teklifNo, h?.tahsilatNo)),
-      tip === 'teklif' ? 'Teklif' : 'Tahsilat',
-      safeText(val(h?.aciklama, h?.not, '')),
-      `${tip === 'teklif' ? '-' : '+'}${money(tutar)}`,
-      money(kumBakiye),
-    ]
-  })
+  const tableRows = seyir.map(h => [
+    tarih(h.tarih),
+    safeText(h.no),
+    h.tip === 'teklif' ? 'Teklif' : 'Tahsilat',
+    safeText(h.aciklama, ''),
+    `${hareketIsareti(h)}${money(h.tutar)}`,
+    money(h.bakiye),
+  ])
 
   cursor = drawTable(ctx, cursor, cols, tableRows.length ? tableRows : [['-', '-', '-', 'Kayıtlı hareket bulunamadı.', '-', '-']], GREEN)
 
