@@ -26,8 +26,8 @@ export default async function TeklifDetayPage({ params }: { params: Promise<{ id
             <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-.03em', color: '#111318' }}>
               Teklif #{teklif.teklif_no}
             </h1>
-            <span className={`badge ${teklif.durum === 'aktif' ? 'badge-green' : teklif.durum === 'iptal' ? 'badge-red' : 'badge-blue'}`}>
-              {teklif.durum === 'aktif' ? 'Aktif' : teklif.durum === 'iptal' ? 'İptal' : 'Onaylandı'}
+            <span className={`badge ${teklif.durum === 'iptal' ? 'badge-red' : 'badge-blue'}`}>
+              {teklif.durum === 'iptal' ? 'İptal' : 'Onaylandı'}
             </span>
           </div>
           <p style={{ fontSize: 13, color: '#9099A8', marginTop: 4 }}>{tarih(teklif.tarih)}</p>

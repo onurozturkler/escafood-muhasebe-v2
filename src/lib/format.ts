@@ -20,13 +20,29 @@ export const tahsilatTuruLabel: Record<string, string> = {
 }
 
 export const durumLabel: Record<string, string> = {
-  aktif:      'Aktif',
   iptal:      'İptal',
   onaylandi:  'Onaylandı',
 }
 
 export const durumRenk: Record<string, string> = {
-  aktif:     'text-green-700 bg-green-50',
   iptal:     'text-red-700 bg-red-50',
   onaylandi: 'text-blue-700 bg-blue-50',
+}
+
+/**
+ * Türkçe formatlı sayı metnini güvenli şekilde çözer.
+ * parseFloat("140.850,15") → 140.85 (bin kat hata, sessizce).
+ * Bu fonksiyon → 140850.15
+ */
+export const sayiCoz = (v: unknown): number => {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0
+  if (v == null) return 0
+  const s = String(v).trim()
+  if (!s) return 0
+  // "1.234.567,89" -> "1234567.89" | "1234.56" -> "1234.56"
+  const normalize = s.includes(',')
+    ? s.replace(/\./g, '').replace(',', '.')
+    : s
+  const n = parseFloat(normalize.replace(/[^\d.\-]/g, ''))
+  return Number.isFinite(n) ? n : 0
 }

@@ -10,6 +10,7 @@ export type Musteri = {
 }
 
 export type MusteriCari = Musteri & {
+  acilis_bakiyesi: number
   toplam_borc: number
   toplam_tahsilat: number
   bakiye: number
@@ -25,7 +26,7 @@ export type Urun = {
   created_at: string
 }
 
-export type TeklifDurum = 'aktif' | 'iptal' | 'onaylandi'
+export type TeklifDurum = 'onaylandi' | 'iptal'
 
 export type Teklif = {
   id: string

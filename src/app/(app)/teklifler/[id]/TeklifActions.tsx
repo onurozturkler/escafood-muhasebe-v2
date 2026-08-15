@@ -29,7 +29,7 @@ export default function TeklifActions({ teklif, musteri, kalemler }: Props) {
 
   const iptalGeriAl = async () => {
     setLoading(true)
-    await createClient().from('teklifler').update({ durum: 'aktif' }).eq('id', teklif.id)
+    await createClient().from('teklifler').update({ durum: 'onaylandi' }).eq('id', teklif.id)
     setLoading(false)
     router.refresh()
   }
@@ -48,7 +48,7 @@ export default function TeklifActions({ teklif, musteri, kalemler }: Props) {
         <button onClick={() => teklifPDF(teklif, musteri, kalemler)} className="btn btn-secondary btn-sm">
           PDF İndir
         </button>
-        {teklif.durum === 'aktif' && (
+        {teklif.durum === 'onaylandi' && (
           <button onClick={iptalEt} disabled={loading} className="btn btn-danger btn-sm">İptal Et</button>
         )}
         {teklif.durum === 'iptal' && (
