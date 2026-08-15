@@ -23,11 +23,16 @@ export default async function MusteriDetayPage({ params }: { params: Promise<{ i
       id: t.id, tarih: t.tarih, tip: 'teklif' as const,
       no: `#${t.teklif_no}`, tutar: t.genel_toplam,
       iptal: t.durum === 'iptal', href: `/teklifler/${t.id}`,
+      // Ekstre PDF'inin "Açıklama" kolonu bunu kullanır.
+      aciklama: t.notlar ?? null,
+      tahsilat_turu: null as string | null,
     })) ?? []),
     ...(tahsilatlar?.map(t => ({
       id: t.id, tarih: t.tarih, tip: 'tahsilat' as const,
       no: `TH${t.tahsilat_no}`, tutar: t.tutar,
       iptal: t.iptal, href: `/tahsilatlar/${t.id}`,
+      aciklama: t.aciklama ?? null,
+      tahsilat_turu: (t.tahsilat_turu ?? null) as string | null,
     })) ?? []),
   ]
 
