@@ -2,11 +2,12 @@
 
 import Link from 'next/link'
 import { tarih, para } from '@/lib/format'
+import { hareketIsareti } from '@/lib/cari'
 
 type Stat = { label: string; value: string; cls: string }
 type Hareket = {
   id: string; tip: 'teklif' | 'tahsilat'; baslik: string
-  musteri: string; tutar: number; tarih: string; durum: string; href: string
+  musteri: string; tutar: number; tarih: string; iptal: boolean; href: string
 }
 
 const quickActions = [
@@ -83,11 +84,13 @@ export default function DashboardClient({ stats, sonHareketler }: { stats: Stat[
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'DM Mono, monospace', color: h.tip === 'teklif' ? 'var(--brand)' : '#15803D' }}>
-                      {h.tip === 'teklif' ? '-' : '+'}₺{para(h.tutar)}
+                    <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'DM Mono, monospace',
+                      textDecoration: h.iptal ? 'line-through' : 'none',
+                      color: h.iptal ? '#9099A8' : h.tip === 'teklif' ? 'var(--brand)' : '#15803D' }}>
+                      {hareketIsareti(h)}₺{para(h.tutar)}
                     </div>
-                    <span className={`badge ${h.durum === 'aktif' ? 'badge-green' : 'badge-red'}`} style={{ marginTop: 3 }}>
-                      {h.durum === 'aktif' ? 'Aktif' : 'İptal'}
+                    <span className={`badge ${h.iptal ? 'badge-red' : 'badge-green'}`} style={{ marginTop: 3 }}>
+                      {h.iptal ? 'İptal' : 'Geçerli'}
                     </span>
                   </div>
                 </div>

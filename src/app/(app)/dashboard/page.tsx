@@ -34,9 +34,9 @@ export default async function DashboardPage() {
   // Gerçek açık bakiye: tüm müşterilerin bakiye toplamı (acilis_bakiyesi dahil)
   const acikBakiye = (cari ?? []).reduce((s, m) => s + (m.bakiye ?? 0), 0)
 
-  // Bu ay aktif teklif toplamı
+  // Bu ay geçerli teklif toplamı
   const buAyTeklif = (teklifler ?? [])
-    .filter(t => t.durum === 'aktif' && new Date(t.tarih) >= buAy)
+    .filter(t => t.durum !== 'iptal' && new Date(t.tarih) >= buAy)
     .reduce((s, t) => s + t.genel_toplam, 0)
 
   // Bugün tahsilat
@@ -58,14 +58,14 @@ export default async function DashboardPage() {
       baslik: `Teklif #${t.teklif_no}`,
       musteri: (t.musteriler as any)?.musteri_adi ?? '-',
       tutar: t.genel_toplam, tarih: t.tarih,
-      durum: t.durum, href: `/teklifler/${t.id}`,
+      iptal: t.durum === 'iptal', href: `/teklifler/${t.id}`,
     }))),
     ...((sonTahsilatlar ?? []).map(t => ({
       id: t.id, tip: 'tahsilat' as const,
       baslik: `Tahsilat #${t.tahsilat_no}`,
       musteri: (t.musteriler as any)?.musteri_adi ?? '-',
       tutar: t.tutar, tarih: t.tarih,
-      durum: t.iptal ? 'iptal' : 'aktif', href: `/tahsilatlar/${t.id}`,
+      iptal: t.iptal, href: `/tahsilatlar/${t.id}`,
     }))),
   ].sort((a, b) => new Date(b.tarih).getTime() - new Date(a.tarih).getTime()).slice(0, 5)
 
