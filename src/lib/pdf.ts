@@ -40,7 +40,10 @@ const FONT_SIZE = 8
 const LINE_H = 10
 
 type Align = 'left' | 'right' | 'center'
-type Col = { header: string; width: number; align?: Align }
+// noWrap: hücre içeriği asla satır sonundan bölünmez.
+// Tarih, tutar, belge no gibi tek parça olması gereken alanlarda ZORUNLU —
+// aksi halde "04.05.202 / 6" gibi kırılmalar oluşur.
+type Col = { header: string; width: number; align?: Align; noWrap?: boolean }
 type PdfCtx = {
   doc: PDFDocument
   regular: any
@@ -386,24 +389,17 @@ function drawTable(ctx: PdfCtx, cursor: Cursor, cols: Col[], rows: string[][], h
 
   rows.forEach((row, ri) => {
     const wrapped = cols.map((col, ci) => {
-  const txt = safeText(row[ci], '').replace(/\s+/g, ' ').trim()
-  const usableW = col.width - pad * 2 - 8
+      const txt = safeText(row[ci], '').replace(/\s+/g, ' ').trim()
+      const usableW = col.width - pad * 2 - 8
 
-  // Barkod, fiyat, miktar, toplam gibi sayısal alanlarda wrap yapma.
-  // Bunlar tek satır kalmalı.
-  if (
-    col.header === 'Sıra' ||
-    col.header === 'Barkod' ||
-    col.header === 'Birim Fiyat' ||
-    col.header === 'Miktar' ||
-    col.header === 'Toplam'
-  ) {
-    return [txt]
-  }
+      // Kolonun kendisi karar verir — başlık adına göre tahmin YAPMA.
+      // (Eskiden burada teklif tablosunun başlıkları sabit yazılıydı; ekstre
+      //  tablosunun kolonları o listede olmadığı için Tarih ve Tutar
+      //  hücreleri satır sonundan bölünüyordu.)
+      if (col.noWrap) return [txt]
 
-  // Sadece Ürün Adı wrap yapsın.
-  return wrapText(txt, ctx.regular, FONT_SIZE, usableW, 26)
-})
+      return wrapText(txt, ctx.regular, FONT_SIZE, usableW, 26)
+    })
     const maxLines = Math.max(...wrapped.map(w => w.length), 1)
     const rowH = maxLines * lineH + rowPad * 2
 
@@ -494,7 +490,7 @@ export async function teklifPDF(teklif: any, musteri: any, kalemler: any[] = [])
   const belgeRows: InfoRow[] = [
     { label: 'Belge No', value: teklifNo, boldValue: true },
     { label: 'Tarih', value: tarih(val(teklif?.tarih, teklif?.createdAt, Date.now())) },
-    { label: 'Durum', value: teklif?.durum === 'iptal' ? 'İptal Edildi' : 'Geçerli' },
+    { label: 'Durum', value: teklif?.durum === 'iptal' ? 'İptal Edildi' : 'Geçerli', noWrap: true },
   ]
 
   const musteriRows: InfoRow[] = [
@@ -515,12 +511,12 @@ export async function teklifPDF(teklif: any, musteri: any, kalemler: any[] = [])
   cursor.y = Math.min(leftBottom, rightBottom) - 12
 
   const cols: Col[] = [
-    { header: 'Sıra', width: 34, align: 'center' },
-    { header: 'Ürün Adı', width: 205 },
-    { header: 'Barkod', width: 96, align: 'center' },
-    { header: 'Birim Fiyat', width: 82, align: 'right' },
-    { header: 'Miktar', width: 58, align: 'right' },
-    { header: 'Toplam', width: 92, align: 'right' },
+    { header: 'Sıra', width: 34, align: 'center', noWrap: true },
+    { header: 'Ürün Adı', width: 205 },                              // tek wrap eden kolon
+    { header: 'Barkod', width: 96, align: 'center', noWrap: true },
+    { header: 'Birim Fiyat', width: 82, align: 'right', noWrap: true },
+    { header: 'Miktar', width: 58, align: 'right', noWrap: true },
+    { header: 'Toplam', width: 92, align: 'right', noWrap: true },
   ]
 
   const rows = kalemler.map((k, index) => {
@@ -590,14 +586,22 @@ export async function ekstrePDF(musteri: any, hareketler: any[] = []) {
   const acilis = Number(val(musteri?.acilis_bakiyesi, musteri?.acilisBakiyesi, 0)) || 0
 
   // Bakiye hesabı src/lib/cari.ts'de; burada tekrar edilmiyor.
-  const seyir = bakiyeSeyri(acilis, hareketler.map((h): Hareket & { aciklama?: string } => ({
-    tarih: h?.tarih,
-    tip: h?.tip === 'teklif' ? 'teklif' : 'tahsilat',
-    tutar: Number(val(h?.tutar, h?.toplamTutar, 0)) || 0,
-    iptal: Boolean(h?.iptal),
-    no: safeText(val(h?.no, h?.belgeNo, h?.teklifNo, h?.tahsilatNo), ''),
-    aciklama: safeText(val(h?.aciklama, h?.not), ''),
-  })))
+  const seyir = bakiyeSeyri(acilis, hareketler.map((h): Hareket & { aciklama: string } => {
+    const tip = h?.tip === 'teklif' ? 'teklif' as const : 'tahsilat' as const
+    // Açıklama: teklifte `notlar`, tahsilatta `aciklama`.
+    // Tahsilatta açıklama boşsa ödeme türünü yaz — kolon boş kalmasın.
+    const turu = tahsilatTuruLabel?.[h?.tahsilat_turu] ?? safeText(h?.tahsilat_turu, '')
+    const metin = safeText(val(h?.aciklama, h?.notlar, h?.not), '')
+      || (tip === 'tahsilat' ? turu : '')
+    return {
+      tarih: h?.tarih,
+      tip,
+      tutar: Number(val(h?.tutar, h?.toplamTutar, 0)) || 0,
+      iptal: Boolean(h?.iptal),
+      no: safeText(val(h?.no, h?.belgeNo, h?.teklifNo, h?.tahsilatNo), ''),
+      aciklama: metin,
+    }
+  }))
 
   const ozetRows: InfoRow[] = [
     { label: 'Müşteri', value: musteriAdi, boldValue: true },
@@ -610,13 +614,15 @@ export async function ekstrePDF(musteri: any, hareketler: any[] = []) {
 
   cursor.y = drawInfoBox(ctx, cursor, 'CARİ ÖZET', ozetRows, MARGIN_X, cursor.y, PAGE_W - MARGIN_X * 2, GREEN, SOFT_GREEN) - 12
 
+  // Ölçüm (Noto Sans, 8pt): "04.05.2026" = 40.9pt, "-1.234.567,89 TL" = 60.9pt.
+  // Hepsi kendi hücresine tek satır sığıyor — bölünmelerine gerek yok.
   const cols: Col[] = [
-    { header: 'Tarih', width: 68, align: 'center' },
-    { header: 'Belge No', width: 82, align: 'center' },
-    { header: 'Tür', width: 68, align: 'center' },
-    { header: 'Açıklama', width: 154 },
-    { header: 'Tutar', width: 90, align: 'right' },
-    { header: 'Bakiye', width: 105, align: 'right' },
+    { header: 'Tarih', width: 68, align: 'center', noWrap: true },
+    { header: 'Belge No', width: 82, align: 'center', noWrap: true },
+    { header: 'Tür', width: 68, align: 'center', noWrap: true },
+    { header: 'Açıklama', width: 154 },                              // tek wrap eden kolon
+    { header: 'Tutar', width: 90, align: 'right', noWrap: true },
+    { header: 'Bakiye', width: 105, align: 'right', noWrap: true },
   ]
 
   const tableRows = seyir.map(h => [
