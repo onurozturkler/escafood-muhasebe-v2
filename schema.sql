@@ -1,6 +1,22 @@
 -- ============================================
 -- ESCA FOOD MUHASEBE v2 — Supabase SQL Schema
 -- ============================================
+--
+-- ⚠️ BU DOSYA GÜNCEL DEĞİL — PROD'U YANSITMIYOR.
+--
+-- Bilinen eksikler (koddan kesin, prod'da VAR ama burada YOK):
+--   • musteriler.acilis_bakiyesi
+--   • musteri_cari view'ının acilis_bakiyesi'ni bakiyeye ekleyen hali
+--
+-- Ayrıca aşağıdaki teklifler.durum tanımı migration ÖNCESİ halidir.
+-- Migration sonrası: check (durum in ('onaylandi','iptal')), default 'onaylandi'
+-- ve view'da  where durum <> 'iptal'.
+-- Bkz. migrations/002_migration_ve_dogrulama.sql
+--
+-- Başka neyin farklı olduğu BİLİNMİYOR. Bu dosyaya güvenerek karar verme;
+-- önce migrations/003_schema_senkron.md'deki adımlarla prod'dan gerçek
+-- dökümü al ve bu dosyayı onunla DEĞİŞTİR.
+-- ============================================
 
 -- Müşteriler
 create table musteriler (
